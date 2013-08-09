@@ -32,15 +32,17 @@ class Entry(object):
       self.see_also = getattr(mod, 'SEE_ALSO', None)
     return self
 
-  def help(self):
-    help = self.help_text
+  def get_help(self):
+    help_text = self.help_text
+    while six.callable(help_text):
+      help_text = help_text()
 
     if self.name == 'commands':  # HACK.
-      help += self.registry.join_keys()
+      help_text += self.registry.join_keys()
 
-    help = help or self.name
+    help_text = help_text or self.name
     if self.see_also:
       also = Join.join_words('"help %s"' % h for h in self.see_also)
-      help = '%s\n\nSee also: %s\n' % (help, also)
+      help_text = '%s\n\nSee also: %s\n' % (help_text, also)
 
     return help

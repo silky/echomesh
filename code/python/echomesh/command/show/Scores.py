@@ -60,7 +60,19 @@ def _scores(path, resolve=False, context='all', recursive=False):
                        _time(stat.st_ctime))
   return printed
 
-SCORES_HELP = """
+def scores(_, *args):
+  flags, paths = Flag.split_flag_args(args)
+  paths = paths or ['']
+  printed = False
+  for p in paths:
+    printed = _scores(p, **flags) or printed
+
+  if printed:
+    LOGGER.info('')
+  else:
+    LOGGER.info('  No matching scores found.\n')
+
+HELP = """
 "show scores" shows some or all of the scores in the echomesh project.
 
 Because of the resolution of score names, there are multiple areas where scores
@@ -75,15 +87,3 @@ The full form of the command is
 
 See "help show contexts" for more information.
 """
-
-def scores(_, *args):
-  flags, paths = Flag.split_flag_args(args)
-  paths = paths or ['']
-  printed = False
-  for p in paths:
-    printed = _scores(p, **flags) or printed
-
-  if printed:
-    LOGGER.info('')
-  else:
-    LOGGER.info('  No matching scores found.\n')

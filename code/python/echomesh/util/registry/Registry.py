@@ -61,7 +61,7 @@ class Registry(object):
     return self.entry(name).load().function
 
   def get_help(self, name):
-    return self.entry(name).load().help()
+    h = self.entry(name).load().get_help()
 
   def join_keys(self, command_only=True, load=True):
     words = []
