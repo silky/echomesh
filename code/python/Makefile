@@ -16,13 +16,21 @@ LIBS=$(shell $(PYTHON) -c "import distutils.sysconfig; print(distutils.sysconfig
 SYSLIBS= $(shell $(PYTHON) -c "import distutils.sysconfig; print(distutils.sysconfig.get_config_var('SYSLIBS'))")
 
 
-Echomesh: Echomesh.o
+StartEchomesh: StartEchomesh.o
 	$(LINKCC) -o $@ $^ -L$(LIBDIR1) -L$(LIBDIR2) -l$(PYLIB) $(LIBS) $(SYSLIBS) $(LINKFORSHARED)
 
-Echomesh.o: Echomesh.c
+StartEchomesh.o: StartEchomesh.c
 	$(CC) -c $^ -I$(INCDIR) -I$(PLATINCDIR)
 
-Echomesh.c: Echomesh.py
-	$(CYTHON) --embed Echomesh.py
+StartEchomesh.c: StartEchomesh.py
+	$(CYTHON) --embed StartEchomesh.py
 
 all: Echomesh
+
+clean:
+	@rm -rf build
+	@rm ./StartEchomesh
+	@find . -type f -name "*.c" -exec rm {} \;
+	@find . -type f -name "*.pyc" -exec rm {} \;
+	@find . -type f -name "*.o" -exec rm {} \;
+	@find . -type f -name "*.so" -exec rm {} \;
