@@ -23,6 +23,6 @@ Echomesh.o: Echomesh.c
 	$(CC) -c $^ -I$(INCDIR) -I$(PLATINCDIR)
 
 Echomesh.c: Echomesh.py
-	@$(PYTHON) $(CYTHON) --embed Echomesh.py
+	$(CYTHON) --embed Echomesh.py
 
 all: Echomesh
