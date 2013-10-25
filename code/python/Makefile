@@ -1,5 +1,6 @@
 # Makefile for creating our standalone Cython program
 PYTHON=python
+CYTHON=cython
 PYVERSION=$(shell $(PYTHON) -c "import sys; print(sys.version[:3])")
 
 INCDIR=$(shell $(PYTHON) -c "from distutils import sysconfig; print(sysconfig.get_python_inc())")
@@ -21,8 +22,7 @@ Echomesh: Echomesh.o
 Echomesh.o: Echomesh.c
 	$(CC) -c $^ -I$(INCDIR) -I$(PLATINCDIR)
 
-CYTHON=../../cython.py
 Echomesh.c: Echomesh.py
-	@$(PYTHON) $(CYTHON) --embed Echomesh.py
+	$(CYTHON) --embed Echomesh.py
 
 all: Echomesh

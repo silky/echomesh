@@ -38,19 +38,19 @@ class PersistentDict(dict):
     self._write()
 
   def pop(self, *args, **kwds):
-    x = super(PersistentDict, self).pop(*arg, **kwds)
+    x = super(PersistentDict, self).pop(*args, **kwds)
     self._write()
     return x
 
   def popitem(self, *args, **kwds):
-    x = super(PersistentDict, self).popitem(*arg, **kwds)
+    x = super(PersistentDict, self).popitem(*args, **kwds)
     self._write()
     return x
 
   def setdefault(self, *args, **kwds):
-    super(PersistentDict, self).setdefault(*arg, **kwds)
+    super(PersistentDict, self).setdefault(*args, **kwds)
     self._write()
 
   def update(self, *args, **kwds):
-    super(PersistentDict, self).update(*arg, **kwds)
+    super(PersistentDict, self).update(*args, **kwds)
     self._write()
