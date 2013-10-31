@@ -6,10 +6,12 @@ code/TAGS
 asset/
 bin/
 cache/
+code/python/build/
 command/.echomesh-xfer/
 log/
 
 *#*
 *.o
+*.c
 *~
 
