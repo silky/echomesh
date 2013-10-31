@@ -16,7 +16,7 @@ class MultiSearch(MasterRunnable):
 
   def add(self, search):
     if search in self.searches:
-      LOGGER.error('Already searching %s')
+      Log.LOGGER.error('Already searching %s')
     else:
       self.index += 1
       loop = Loop(search, self.callback, self.interval, self.preload,
@@ -33,5 +33,5 @@ class MultiSearch(MasterRunnable):
       self.remove_slave(loop)
 
     else:
-      LOGGER.error('No search %s', search)
+      Log.LOGGER.error('No search %s', search)
 
