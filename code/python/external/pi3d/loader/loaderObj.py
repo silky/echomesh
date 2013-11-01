@@ -1,9 +1,15 @@
-import re, os
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import sys
+import os
+
 from pi3d.constants import *
 from pi3d.loader.parse_mtl import parse_mtl
-from pi3d.Shape import Shape
 from pi3d.Texture import Texture
 from pi3d.Buffer import Buffer
+from pi3d.util import Log
+
+LOGGER = Log.logger(__name__)
 
 #########################################################################################
 #
@@ -49,7 +55,7 @@ def loadFileOBJ(model, fileName):
     *model*
       Model object to add to.
     *fileName*
-      Path and name of obj file relative to top directory.
+      Path and name of obj file relative to program file.
   """
   model.coordinateSystem = "Y-up"
   model.parent = None
@@ -59,8 +65,10 @@ def loadFileOBJ(model, fileName):
 
   # read in the file and parse into some arrays
 
+  if fileName[0] != '/':
+    fileName = sys.path[0] + '/' + fileName
   filePath = os.path.split(os.path.abspath(fileName))[0]
-  print filePath
+  print(filePath)
   f = open(fileName, 'r')
 
   vertices = []
@@ -80,7 +88,7 @@ def loadFileOBJ(model, fileName):
 
   # current face state
   group = 0
-  object = 0
+  objct = 0
   smooth = 0
 
   for l in f:
@@ -93,22 +101,22 @@ def loadFileOBJ(model, fileName):
         x = float(chunks[1])
         y = float(chunks[2])
         z = -float(chunks[3]) # z direction away in gl es 2.0 shaders
-        vertices.append((x,y,z))
+        vertices.append((x, y, z))
 
-      # Normals in (x,y,z) form; normals might not be unit
+      # Normals in (x, y, z) form; normals might not be unit
       # vn 0.707 0.000 0.707
       if chunks[0] == "vn" and len(chunks) == 4:
         x = float(chunks[1])
         y = float(chunks[2])
         z = -float(chunks[3]) # z direction away in gl es 2.0 shaders
-        normals.append((x,y,z))
+        normals.append((x, y, z))
 
       # Texture coordinates in (u,v)
       # vt 0.500 -1.352
       if chunks[0] == "vt" and len(chunks) >= 3:
         u = float(chunks[1])
         v = float(chunks[2])
-        uvs.append((u,v))
+        uvs.append((u, v))
 
       # Face
       if chunks[0] == "f" and len(chunks) >= 4:
@@ -151,7 +159,7 @@ def loadFileOBJ(model, fileName):
           'normal':normal_index,
 
           'group':group,
-          'object':object,
+          'object':objct,
           'smooth':smooth,
           })
 
@@ -161,7 +169,7 @@ def loadFileOBJ(model, fileName):
 
       # Object
       if chunks[0] == "o" and len(chunks) == 2:
-        object = chunks[1]
+        objct = chunks[1]
 
       # Materials definition
       if chunks[0] == "mtllib" and len(chunks) == 2:
@@ -184,8 +192,8 @@ def loadFileOBJ(model, fileName):
       if chunks[0] == "s" and len(chunks) == 2:
         smooth = chunks[1]
   if VERBOSE:
-    print "materials:  ", materials
-    print "numv: ", numv
+    print("materials:  ", materials)
+    print("numv: ", numv)
 
   for g in faces:
     numv[g] -= 1
@@ -196,21 +204,30 @@ def loadFileOBJ(model, fileName):
     g_tex_coords = []
     g_indices = []
     i = 0 # vertex counter in this material
-    j = 0 # triangle vertex count in this material
     if VERBOSE:
-      print "len uv=",len(vertices)
+      print("len uv=", len(vertices))
     for f in faces[g]:
       iStart = i
-      for v in range(len(f['vertex'])):
-        g_vertices.append(vertices[f['vertex'][v]-1])
-        g_normals.append(normals[f['normal'][v]-1])
-        if (len(f['uv']) > 0 and len(uvs[f['uv'][v]-1]) == 2):
-          g_tex_coords.append(uvs[f['uv'][v]-1])
+      length = len(f['vertex'])
+      length_n = len(f['normal'])
+      #for component in 'normal', 'uv':
+      #  if length > len(f[component]):
+      #    LOGGER.error('There were more vertices than %ss: %d > %d',
+      #                 component, length, len(f[component]))
+      #    length = len(f[component])
+
+      for v in range(length):
+        g_vertices.append(vertices[f['vertex'][v] - 1])
+        if length_n == length: #only use normals if there is one for each vertex
+          g_normals.append(normals[f['normal'][v] - 1])
+        if (len(f['uv']) > 0 and len(uvs[f['uv'][v] - 1]) == 2):
+          g_tex_coords.append(uvs[f['uv'][v] - 1])
         i += 1
       n = i - iStart - 1
-      for t in range(1,n):
+      for t in range(1, n):
         g_indices.append((iStart, iStart + t + 1, iStart + t))
-
+    if len(g_normals) != len(g_vertices):
+      g_normals = None # force Buffer.__init__() to generate normals
     model.buf.append(Buffer(model, g_vertices, g_tex_coords, g_indices, g_normals))
     n = len(model.buf) - 1
     model.vGroup[g] = n
@@ -221,22 +238,22 @@ def loadFileOBJ(model, fileName):
 
 
     #for i in range(len(model.vGroup[g].normals)):
-    #  print model.vGroup[g].normals[i],
+    #  print(model.vGroup[g].normals[i], end='')
     if VERBOSE:
-      print
-      print "indices=",len(model.buf[n].indices)
-      print "vertices=",len(model.buf[n].vertices)
-      print "normals=",len(model.buf[n].normals)
-      print "tex_coords=",len(model.buf[n].tex_coords)
+      print()
+      print("indices=", len(model.buf[n].indices))
+      print("vertices=", len(model.buf[n].vertices))
+      print("normals=", len(model.buf[n].normals))
+      print("tex_coords=", len(model.buf[n].tex_coords))
 
   material_lib = parse_mtl(open(os.path.join(filePath, mtllib), 'r'))
   for m in materials:
     if VERBOSE:
-      print m
+      print(m)
     if 'mapDiffuse' in material_lib[m]:
       tfileName = material_lib[m]['mapDiffuse']
       model.buf[model.vGroup[materials[m]]].texFile = tfileName
-      model.buf[model.vGroup[materials[m]]].textures = [Texture(os.path.join(filePath, tfileName), False, True)] # load from file
+      model.buf[model.vGroup[materials[m]]].textures = [Texture(filePath + '/' + tfileName, False, True)] # load from file
     else:
       model.buf[model.vGroup[materials[m]]].texFile = None
       model.buf[model.vGroup[materials[m]]].textures = []

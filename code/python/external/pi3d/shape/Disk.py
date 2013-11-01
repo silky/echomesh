@@ -1,3 +1,5 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from math import pi
 
 from pi3d.constants import *
@@ -11,7 +13,7 @@ class Disk(Shape):
                rx=0.0, ry=0.0, rz=0.0, sx=1.0, sy=1.0, sz=1.0,
                cx=0.0, cy=0.0, cz=0.0):
     """uses standard constructor for Shape extra Keyword arguments:
-    
+
       *radius*
         Radius of disk.
       *sides*
@@ -21,7 +23,7 @@ class Disk(Shape):
                                cx, cy, cz)
 
     if VERBOSE:
-      print "Creating disk ..."
+      print("Creating disk ...")
 
     self.verts = []
     self.norms = []
@@ -32,18 +34,20 @@ class Disk(Shape):
 
     st = 2 * pi / sides
     for j in range(-1, 1):
-      self._add_vertex((0.0, -0.1*j, 0.0), (0.0, -j, 0.0), (0.5, 0.5))
+      self.verts.append((0.0, -0.1*j, 0.0))
+      self.norms.append((0.0, -j, 0.0))
+      self.texcoords.append((0.5, 0.5))
       for r in range(sides+1):
         ca, sa = Utility.from_polar_rad(r * st)
-        self._add_vertex((radius * sa, 0.0, radius * ca),
-                        (0.0, -j - 0.1*j, 0.0), (sa * 0.5 + 0.5, ca * 0.5 + 0.5))
+        self.verts.append((radius * sa, 0.0, radius * ca))
+        self.norms.append((0.0, -j - 0.1*j, 0.0))
+        self.texcoords.append((sa * 0.5 + 0.5, ca * 0.5 + 0.5))
       if j == -1:
         v0, v1, v2 = 0, 1, 2
       else:
         v0, v1, v2 = sides + 2, sides + 4, sides + 3 # i.e. reverse direction to show on back
       for r in range(sides):
-        self._add_tri((v0, r + v1, r + v2))
+        self.inds.append((v0, r + v1, r + v2))
 
     self.but = []
     self.buf.append(Buffer(self, self.verts, self.texcoords, self.inds, self.norms))
-

@@ -1,8 +1,13 @@
-import math
-import Image
-import PIL.ImageOps
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from numpy import cross, dot, sqrt, array, arctan2, arcsin, degrees, subtract, multiply
+import math
+import sys
+
+from six.moves import xrange
+
+from PIL import Image, ImageOps
+
+from numpy import cross, dot, sqrt, array, arctan2, arcsin, degrees, subtract
 
 from pi3d import *
 from pi3d.Buffer import Buffer
@@ -19,11 +24,11 @@ class ElevationMap(Shape):
                x=0.0, y=0.0, z=0.0, rx=0.0, ry=0.0, rz=0.0,
                sx=1.0, sy=1.0, sz=1.0, cx=0.0, cy=0.0, cz=0.0, smooth=True, cubic=False):
     """uses standard constructor for Shape
-    
+
     Arguments:
       *mapfile*
         Greyscale image path/file, string.
-    
+
     Keyword arguments:
       *width, depth, height*
         Of the map in world units.
@@ -38,18 +43,20 @@ class ElevationMap(Shape):
     """
     super(ElevationMap, self).__init__(camera, light, name, x, y, z, rx, ry, rz,
                                        sx, sy, sz, cx, cy, cz)
+    if mapfile[0] != '/':
+      mapfile = sys.path[0] + '/' + mapfile
     if VERBOSE:
-      print "Loading height map ...",mapfile
+      print("Loading height map ...", mapfile)
 
-    if divx>200 or divy>200:
-      print "... Map size can't be bigger than 200x200 divisions"
+    if divx > 200 or divy > 200:
+      print("... Map size can't be bigger than 200x200 divisions")
       divx = 200
       divy = 200
 
     im = Image.open(mapfile)
-    im = PIL.ImageOps.invert(im)
+    im = ImageOps.invert(im)
     ix, iy = im.size
-    if (ix>200 and divx==0) or (divx > 0):
+    if (ix > 200 and divx == 0) or (divx > 0):
       if divx == 0:
         divx = 200
         divy = 200
@@ -64,12 +71,12 @@ class ElevationMap(Shape):
     self.width = width
     self.depth = depth
     self.height = height
-    self.ix=ix
-    self.iy=iy
+    self.ix = ix
+    self.iy = iy
     self.ttype = GL_TRIANGLE_STRIP
 
     if VERBOSE:
-      print "Creating Elevation Map ...", ix, iy
+      print("Creating Elevation Map ...", ix, iy)
 
     wh = width * 0.5
     hh = depth * 0.5
@@ -84,9 +91,9 @@ class ElevationMap(Shape):
     tex_coords = []
     idx = []
 
-    for y in xrange(0,iy):
-      for x in xrange(0,ix):
-        hgt = (self.pixels[x,y])*ht
+    for y in xrange(0, iy):
+      for x in xrange(0, ix):
+        hgt = (self.pixels[x, y])*ht
         this_x = -wh + x*ws
         this_z = -hh + y*hs
         if cubic:
@@ -123,14 +130,14 @@ class ElevationMap(Shape):
         verts.append((this_x, hgt, this_z))
         tex_coords.append(((ix-x) * tx,(iy-y) * ty))
 
-    s=0
+    s = 0
     #create one long triangle_strip by alternating X directions
-    for y in range(0,iy-1):
-      for x in range(0,ix-1):
+    for y in range(0, iy-1):
+      for x in range(0, ix-1):
         i = (y * ix)+x
-        idx.append((i,i+ix,i+ix+1))
-        idx.append((i+ix+1,i+1,i))
-        s+=2
+        idx.append((i, i+ix, i+ix+1))
+        idx.append((i+ix+1, i+1, i))
+        s += 2
 
     self.buf = []
     self.buf.append(Buffer(self, verts, tex_coords, idx, None, smooth))
@@ -156,7 +163,7 @@ class ElevationMap(Shape):
 
   def calcHeight(self, px, pz):
     """accurately return the hight of the map at the point specified
-    
+
     Arguments:
       *px, pz*
         Location of the point in world coordinates to calculate height.
@@ -201,7 +208,7 @@ class ElevationMap(Shape):
   def clashTest(self, px, py, pz, rad):
     """Works out if an object at a given location and radius will overlap
     with the map surface. Returns four values:
-    
+
     * boolean whether there is a clash
     * x, y, z components of the normal vector
     * the amount of overlap at the x,z location
@@ -234,7 +241,7 @@ class ElevationMap(Shape):
     if z1 > self.iy-1: z1 = self.iy-1
 
     # go through grid around px, pz
-    minDist, minLoc = 1000000, (0,0)
+    minDist, minLoc = 1000000, (0, 0)
     for i in xrange(x0+1, x1):
       for j in xrange(z0+1, z1):
         # use the locations stored in the one dimensional vertices matrix
@@ -248,11 +255,11 @@ class ElevationMap(Shape):
         distSq = (px - vertp[0])**2 + (py - vertp[1])**2 + (pz - vertp[2])**2
         if distSq < minDist: # this vertex is nearest so keep a record
           minDist = distSq
-          minLoc = (i,j)
+          minLoc = (i, j)
         #now find the distance between the point and the plane perpendicular
         #to the normal at this vertex
-        pDist = Utility.dotproduct((px - vertp[0]),(py - vertp[1]),(pz - vertp[2]),
-                                  -normp[0], -normp[1], -normp[2])
+        pDist = dot([px - vertp[0], py - vertp[1], pz - vertp[2]],
+                    [-normp[0], -normp[1], -normp[2]])
         #and the position where the normal from point crosses the plane
         xIsect = px - normp[0]*pDist
         zIsect = pz - normp[2]*pDist
@@ -289,9 +296,9 @@ class ElevationMap(Shape):
   def pitch_roll(self, px, pz):
     """works out the pitch (rx) and roll (rz) to apply to an object
     on the surface of the map at this point
-    
+
     * returns a tuple (pitch, roll) in degrees
-    
+
     Arguments:
       *px*
         x location
@@ -334,8 +341,7 @@ def intersect_triangle(v1, v2, v3, pos):
       tuple (x,y,z) defining the x,z of the vertical line intersecting triangle
   """
   #calc normal from two edge vectors v2-v1 and v3-v1
-  #nVec = Utility.crossproduct(v2[0]-v1[0], v2[1]-v1[1], v2[2]-v1[2], v3[0]-v1[0],  v3[1]-v1[1], v3[2]-v1[2])
-  nVec = cross(subtract(v2,v1), subtract(v3, v1))
+  nVec = cross(subtract(v2, v1), subtract(v3, v1))
   #equation of plane: Ax + By + Cz = kVal where A,B,C are components of normal. x,y,z for point v1 to find kVal
   kVal = dot(nVec,v1)
   #return y val i.e. y = (kVal - Ax - Cz)/B

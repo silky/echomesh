@@ -1,15 +1,22 @@
-from ctypes import c_float
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-import math
+from ctypes import c_float, byref
+
+import six
 import time
 import threading
 import traceback
-
-from echomesh.util import Log
+import platform
 
 from pi3d.constants import *
+from pi3d.util import Log
 from pi3d.util import Utility
 from pi3d.util.DisplayOpenGL import DisplayOpenGL
+from pi3d.Keyboard import Keyboard
+
+if PLATFORM != PLATFORM_PI:
+  from pyxlib.x import *
+  from pyxlib import xlib
 
 LOGGER = Log.logger(__name__)
 
@@ -17,12 +24,10 @@ ALLOW_MULTIPLE_DISPLAYS = False
 RAISE_EXCEPTIONS = True
 MARK_CAMERA_CLEAN_ON_EACH_LOOP = True
 
-DEFAULT_ASPECT = 60.0
+DEFAULT_FOV = 45.0
 DEFAULT_DEPTH = 24
-DEFAULT_NEAR_3D = 1.0
-DEFAULT_FAR_3D = 1000.0
-DEFAULT_NEAR_2D = 1.0
-DEFAULT_FAR_2D = 1000.0
+DEFAULT_NEAR = 1.0
+DEFAULT_FAR = 1000.0
 WIDTH = 0
 HEIGHT = 0
 
@@ -53,6 +58,16 @@ class Display(object):
     self.sprites = []
     self.sprites_to_load = set()
     self.sprites_to_unload = set()
+
+    self.tidy_needed = False
+    self.textures_dict = {}
+    self.vbufs_dict = {}
+    self.ebufs_dict = {}
+    self.external_mouse = None
+
+    if PLATFORM != PLATFORM_PI:
+      self.event_list = []
+      self.ev = xlib.XEvent()
 
     self.opengl = DisplayOpenGL()
     self.max_width, self.max_height = self.opengl.width, self.opengl.height
@@ -124,9 +139,9 @@ class Display(object):
   def resize(self, x=0, y=0, w=0, h=0):
     """Reshape the window with the given coordinates."""
     if w <= 0:
-      w = display.max_width
+      w = self.max_width
     if h <= 0:
-      h = display.max_height
+      h = self.max_height
     self.width = w
     self.height = h
 
@@ -152,11 +167,17 @@ class Display(object):
 
   def destroy(self):
     """Destroy the current Display and reset Display.INSTANCE."""
+    self._tidy()
     self.stop()
     try:
-      self.opengl.destroy()
+      self.opengl.destroy(self)
     except:
       pass
+    if self.external_mouse:
+      try:
+        self.external_mouse.stop()
+      except:
+        pass_
     try:
       self.mouse.stop()
     except:
@@ -202,6 +223,16 @@ class Display(object):
   def _loop_begin(self):
     # TODO(rec):  check if the window was resized and resize it, removing
     # code from MegaStation to here.
+    if PLATFORM != PLATFORM_PI:
+      n = xlib.XEventsQueued(self.opengl.d, xlib.QueuedAfterFlush)
+      for i in range(n):
+        if xlib.XCheckMaskEvent(self.opengl.d, KeyPressMask, self.ev):
+          self.event_list.append(self.ev)
+        else:
+          xlib.XNextEvent(self.opengl.d, self.ev)
+          if self.ev.type == ClientMessage:
+            if (self.ev.xclient.data.l[0] == self.opengl.WM_DELETE_WINDOW.value):
+              self.destroy()
     self.clear()
     with self.lock:
       self.sprites_to_load, to_load = set(), self.sprites_to_load
@@ -213,6 +244,34 @@ class Display(object):
       camera = Camera.instance()
       if camera:
         camera.was_moved = False
+
+    if self.tidy_needed:
+      self._tidy()
+
+  def _tidy(self):
+    to_del = []
+    for i, tex in six.iteritems(self.textures_dict):
+      LOGGER.debug('tex0=%s tex1=%s',tex[0], tex[1])
+      if tex[1] == 1:
+        opengles.glDeleteTextures(1, byref(tex[0]))
+        to_del.append(i)
+    for i in to_del:
+      del self.textures_dict[i]
+    to_del = []
+    for i, vbuf in six.iteritems(self.vbufs_dict):
+      if vbuf[1] == 1:
+        opengles.glDeleteBuffers(1, byref(vbuf[0]))
+        to_del.append(i)
+    for i in to_del:
+      del self.vbufs_dict[i]
+    to_del = []
+    for i, ebuf in six.iteritems(self.ebufs_dict):
+      if ebuf[1] == 1:
+        opengles.glDeleteBuffers(1, byref(ebuf[0]))
+        to_del.append(i)
+    for i in to_del:
+      del self.ebufs_dict[i]
+    self.tidy_needed = False
 
   def _loop_end(self):
     with self.lock:
@@ -252,21 +311,13 @@ class Display(object):
     self.opengl.swap_buffers()
 
 
-def create(is_3d=True, x=None, y=None, w=None, h=None, near=None, far=None,
-           aspect=None, depth=None, background=None,
+def create(x=None, y=None, w=None, h=None, near=None, far=None,
+           fov=DEFAULT_FOV, depth=DEFAULT_DEPTH, background=None,
            tk=False, window_title='', window_parent=None, mouse=False,
            frames_per_second=None):
   """
   Creates a pi3d Display.
 
-  *is_3d*
-    Are we creating a 2- or 3-d display?
-  *tk*
-    Do we use the tk windowing system?
-  *window_parent*
-    An optional tk parent window.
-  *window_title*
-    A window title for tk windows only.
   *x*
     Left x coordinate of the display.  If None, defaults to the x coordinate of
     the tkwindow parent, if any.
@@ -281,28 +332,61 @@ def create(is_3d=True, x=None, y=None, w=None, h=None, near=None, far=None,
     This will be used for the default instance of Camera *near* plane
   *far*
     This will be used for the default instance of Camera *far* plane
-  *aspect*
-    Not used in OpenGL ES 2.0, replaced by Camera lens definition
+  *fov*
+    Used to define the Camera lens field of view
   *depth*
     The bit depth of the display - must be 8, 16 or 24.
+  *background*
+    r,g,b,alpha (opacity)
+  *tk*
+    Do we use the tk windowing system?
+  *window_title*
+    A window title for tk windows only.
+  *window_parent*
+    An optional tk parent window.
   *mouse*
     Automatically create a Mouse.
   *frames_per_second*
     Maximum frames per second to render (None means "free running").
   """
   if tk:
-    from pi3d.util import TkWin
-    if not (w and h):
-      # TODO: how do we do full-screen in tk?
-      LOGGER.error("Can't compute default window size when using tk")
-      raise Exception
+    if PLATFORM != PLATFORM_PI:
+      #just use python-xlib same as non-tk but need dummy behaviour
+      class DummyTkWin(object):
+        def __init__(self):
+          self.tkKeyboard = Keyboard()
+          self.ev = ""
+          self.key = ""
+          self.winx, self.winy = 0, 0
+          self.width, self.height = 1920, 1180
+          self.event_list = []
 
-    tkwin = TkWin.TkWin(window_parent, window_title, w, h)
-    tkwin.update()
-    if x is None:
-      x = tkwin.winx
-    if y is None:
-      y = tkwin.winy
+        def update(self):
+          self.key = self.tkKeyboard.read_code()
+          if self.key == "":
+            self.ev = ""
+          else:
+            self.ev = "key"
+
+      tkwin = DummyTkWin()
+      x = x or 0
+      y = y or 0
+
+    else:
+      from pi3d.util import TkWin
+      if not (w and h):
+        # TODO: how do we do full-screen in tk?
+        #LOGGER.error('Can't compute default window size when using tk')
+        #raise Exception
+        # ... just force full screen - TK will automatically fit itself into the screen
+        w = 1920
+        h = 1180
+      tkwin = TkWin.TkWin(window_parent, window_title, w, h)
+      tkwin.update()
+      if x is None:
+        x = tkwin.winx
+      if y is None:
+        y = tkwin.winy
 
   else:
     tkwin = None
@@ -311,56 +395,40 @@ def create(is_3d=True, x=None, y=None, w=None, h=None, near=None, far=None,
 
   display = Display(tkwin)
   if (w or 0) <= 0:
-     w = display.max_width - 2 * x
-     if w <= 0:
-       w = display.max_width
+    w = display.max_width - 2 * x
+    if w <= 0:
+      w = display.max_width
   if (h or 0) <= 0:
-     h = display.max_height - 2 * y
-     if h <= 0:
-       h = display.max_height
+    h = display.max_height - 2 * y
+    if h <= 0:
+      h = display.max_height
   LOGGER.debug('Display size is w=%d, h=%d', w, h)
 
   display.frames_per_second = frames_per_second
 
   if near is None:
-    near = DEFAULT_NEAR_3D if is_3d else DEFAULT_NEAR_2D
+    near = DEFAULT_NEAR
   if far is None:
-    far = DEFAULT_FAR_3D if is_3d else DEFAULT_FAR_2D
+    far = DEFAULT_FAR
 
   display.width = w
   display.height = h
   display.near = near
   display.far = far
+  display.fov = fov
 
   display.left = x
   display.top = y
   display.right = x + w
   display.bottom = y + h
 
-  display.opengl.create_display(x, y, w, h)
+  display.opengl.create_display(x, y, w, h, depth)
   display.mouse = None
 
   if mouse:
     from pi3d.Mouse import Mouse
-    display.mouse = Mouse(width=w, height=h)
+    display.mouse = Mouse(width=w, height=h, restrict=False)
     display.mouse.start()
-
-  """ TODO none of this does anything in OpenGL ES 2.0
-  opengles.glMatrixMode(GL_PROJECTION)
-  Utility.load_identity()
-  if is_3d:
-    hht = near * math.tan(math.radians(aspect / 2.0))
-    hwd = hht * w / h
-    opengles.glFrustumf(c_float(-hwd), c_float(hwd), c_float(-hht), c_float(hht),
-                        c_float(near), c_float(far))
-    opengles.glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST)
-  else:
-    opengles.glOrthof(c_float(0), c_float(w), c_float(0), c_float(h),
-                      c_float(near), c_float(far))
-
-  opengles.glMatrixMode(GL_MODELVIEW)
-  Utility.load_identity()
-  """
 
   if background:
     display.set_background(*background)

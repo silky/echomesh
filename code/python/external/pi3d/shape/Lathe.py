@@ -1,3 +1,5 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from pi3d.constants import *
 from pi3d.Shape import Shape
 
@@ -9,11 +11,11 @@ class Lathe(Shape):
   i.e. [..(0,2),(2,1),(1.5,0)..] has a sharp corner at 2,1 and should be entered as
   [..(0,2),(2,1),(2,0.999),(1.5,0)..] to get good shading
   """
-  def __init__(self, camera=None, light=None, path=[], sides=12, name="", x=0.0, y=0.0, z=0.0,
+  def __init__(self, camera=None, light=None, path=None, sides=12, name="", x=0.0, y=0.0, z=0.0,
                rx=0.0, ry=0.0, rz=0.0, sx=1.0, sy=1.0, sz=1.0,
                cx=0.0, cy=0.0, cz=0.0):
     """uses standard constructor for Shape extra Keyword arguments:
-    
+
       *path*
         Array of coordinates rotated to form shape [(x0,y0),(x1,y1)..]
       *sides*
@@ -23,9 +25,9 @@ class Lathe(Shape):
                                 sx, sy, sz, cx, cy, cz)
 
     if VERBOSE:
-      print "Creating lathe ..."
+      print("Creating lathe ...")
 
-    self.path = path
+    self.path = path if path != None else []
     self.ttype = GL_TRIANGLES
 
     self.buf = []

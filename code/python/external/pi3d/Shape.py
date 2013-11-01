@@ -1,7 +1,8 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import ctypes
 
-from itertools import chain
-from numpy import array, dot, ravel
+from numpy import array, dot
 from math import radians, pi, sin, cos
 
 from pi3d.constants import *
@@ -37,7 +38,7 @@ class Shape(Loadable):
     self.unif = (ctypes.c_float * 60)(
       x, y, z, rx, ry, rz,
       sx, sy, sz, cx, cy, cz,
-      0.5, 0.5, 0.5, 5000.0, 0.8, 0.0,
+      0.5, 0.5, 0.5, 5000.0, 0.8, 1.0,
       0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
       light.lightpos[0], light.lightpos[1], light.lightpos[2],
       light.lightcol[0], light.lightcol[1], light.lightcol[2],
@@ -54,7 +55,7 @@ class Shape(Loadable):
        2  scale                                        6   8
        3  offset                                       9  11
        4  fog shade                                   12  14
-       5  fog distance and alph (only 2 used)         15  16
+       5  fog distance, fog alpha, shape alpha        15  17
        6  camera position                             18  20
        7  unused: custom data space                   21  23
        8  light0 position, direction vector           24  26
@@ -129,6 +130,8 @@ class Shape(Loadable):
     NB there is no facility for setting umult and vmult with draw: they must be
     set using set_draw_details or Buffer.set_draw_details.
     """
+    self.load_opengl() # really just to set the flag so _unload_opengl runs
+
     from pi3d.Camera import Camera
 
     camera = camera or self._camera or Camera.instance()
@@ -161,7 +164,7 @@ class Shape(Loadable):
     for b in self.buf:
       # Shape.draw has to be passed either parameter == None or values to pass
       # on.
-      b.draw(shader, txtrs, ntl, shny)
+      b.draw(self, shader, txtrs, ntl, shny)
 
   def set_shader(self, shader):
     """Wrapper method to set just the Shader for all the Buffer objects of
@@ -174,6 +177,7 @@ class Shape(Loadable):
         Shader to use
 
     """
+
     self.shader = shader
     for b in self.buf:
       b.shader = shader
@@ -240,6 +244,23 @@ class Shape(Loadable):
     for b in self.buf:
       b.set_material(material)
 
+  def set_offset(self, offset):
+    """Wrapper for setting uv texture offset in each Buffer object.
+
+    Arguments:
+      *offset*
+        tuple (u_off, v_off) values between 0.0 and 1.0 to offset the texture
+        sampler by
+    """
+    for b in self.buf:
+      b.set_offset(offset)
+
+  def offset(self):
+    """Get offset as (u, v) tuple of (first) buf uv. Doesnt check that buf array
+    exists and has at least one value and only returns offset for that value"""
+    return self.buf[0].unib[9:11]
+
+
   def set_fog(self, fogshade, fogdist):
     """Set fog for this Shape only, it uses the shader smoothblend function from
     1/3 fogdist to fogdist.
@@ -254,6 +275,19 @@ class Shape(Loadable):
     self.unif[15] = fogdist
     self.unif[16] = fogshade[3]
 
+  def set_alpha(self, alpha=1.0):
+    """Set alpha for this Shape only
+
+    Arguments:
+      *alpha*
+        alpha value between 0.0 and 1.0 (default)
+    """
+    self.unif[17] = alpha
+
+  def alpha(self):
+    """Get value of alpha"""
+    return self.unif[17]
+
   def set_light(self, light, num=0):
     """Set the values of the lights.
 
@@ -264,7 +298,7 @@ class Shape(Loadable):
         number of the light to set
     """
     #TODO (pg) need MAXLIGHTS global variable, room for two now but shader
-    # only uses 1. Also shader doesn't use light colour or ambient colour
+    # only uses 1.
     if num > 1 or num < 0:
       num = 0
     stn = 24 + num * 9
@@ -324,6 +358,10 @@ class Shape(Loadable):
     """
     self.unif[index_from:(index_from + len(data))] = data
 
+  def set_point_size(self, point_size=0.0):
+    for b in self.buf:
+      b.unib[8] = point_size
+
   def x(self):
     """get value of x"""
     return self.unif[0]
@@ -335,6 +373,29 @@ class Shape(Loadable):
   def z(self):
     """get value of z"""
     return self.unif[2]
+
+  def get_bounds(self):
+    """Find the limits of vertices in three dimensions. Returns a tuple
+    (left, bottom, front, right, top, back)
+    """
+    left, bottom, front  = 10000, 10000, 10000
+    right, top, back = -10000, -10000, -10000
+    for b in self.buf:
+      for v in b.vertices:
+        if v[0] < left:
+          left = v[0]
+        if v[0] > right:
+          right = v[0]
+        if v[1] < bottom:
+          bottom = v[1]
+        if v[1] > top:
+          top = v[1]
+        if v[2] < front:
+          front = v[2]
+        if v[2] > back:
+          back = v[2]
+
+    return (left, bottom, front, right, top, back)
 
   def scale(self, sx, sy, sz):
     """Arguments:
@@ -485,7 +546,7 @@ class Shape(Loadable):
     self.unif[5] = v
     self.MFlg = True
 
-  def rotateIncX(self,v):
+  def rotateIncX(self, v):
     """Arguments:
 
       *v*
@@ -498,7 +559,7 @@ class Shape(Loadable):
     self.rox[2, 1] = -s
     self.MFlg = True
 
-  def rotateIncY(self,v):
+  def rotateIncY(self, v):
     """Arguments:
 
       *v*
@@ -511,7 +572,7 @@ class Shape(Loadable):
     self.roy[2, 0] = s
     self.MFlg = True
 
-  def rotateIncZ(self,v):
+  def rotateIncZ(self, v):
     """Arguments:
 
       *v*
@@ -523,17 +584,6 @@ class Shape(Loadable):
     self.roz[0, 1] = s
     self.roz[1, 0] = -s
     self.MFlg = True
-
-  def _add_vertex(self, vert, norm, texc):
-    """add vertex,normal and tex_coords ..."""
-    self.verts.append(vert)
-    self.norms.append(norm)
-    self.texcoords.append(texc)
-
-
-  def _add_tri(self, indx):
-    """add triangle refs."""
-    self.inds.append(indx)
 
   def _lathe(self, path, sides=12, rise=0.0, loops=1.0):
     """Returns a Buffer object by rotating the points defined in path.
@@ -556,14 +606,12 @@ class Shape(Loadable):
 
     s = len(path)
     rl = int(self.sides * loops)
-    ssize = rl * 6 * (s - 1)
 
     pn = 0
     pp = 0
     tcx = 1.0 / self.sides
     pr = (pi / self.sides) * 2.0
     rdiv = rise / rl
-    ss = 0
 
     # Find largest and smallest y of the path used for stretching the texture
     miny = path[0][1]

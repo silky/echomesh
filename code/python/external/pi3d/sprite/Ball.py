@@ -1,8 +1,5 @@
-import math
-
 from pi3d.Display import Display
-from pi3d.Texture import Texture
-from pi3d.util import Utility
+from numpy import dot
 
 from pi3d.shape.Sprite import ImageSprite
 
@@ -15,13 +12,14 @@ class Ball(ImageSprite):
   This allows the Ball dimensions to be set in approximately pixel sizes
   """
   def __init__(self, camera=None, light=None, shader=None, texture=None,
-               radius=0.0, x=0.0, y=0.0, vx=0.0, vy=0.0, decay=0.001):
+               radius=0.0, x=0.0, y=0.0, z=1000, vx=0.0, vy=0.0, decay=0.001):
     super(Ball, self).__init__(texture=texture, shader=shader,
-                              camera=camera, light=light, w=2 * radius,
-                              h=2 * radius, name="",x=x, y=y, z=1000)
+                              camera=camera, light=light, w=2.0*radius,
+                              h=2.0*radius, name="",x=x, y=y, z=z)
     self.radius = radius
-    self.unif[0] = x
-    self.unif[1] = y
+    #self.unif[0] = x
+    #self.unif[1] = y
+    #self.unif[2] = z
     self.vx = vx
     self.vy = vy
     self.mass = radius * radius
@@ -36,7 +34,7 @@ class Ball(ImageSprite):
     dx = (self.unif[0] + self.vx) - (otherball.unif[0] + otherball.vx)
     dy = (self.unif[1] + self.vy) - (otherball.unif[1] + otherball.vy)
     rd = self.radius + otherball.radius
-    return Utility.sqsum(dx, dy) <= (rd * rd)
+    return dot(dx, dy) < (rd * rd)
 
   def bounce_collision(self, otherball):
     """work out resultant velocities using 17th.C phsyics"""
@@ -45,9 +43,8 @@ class Ball(ImageSprite):
     dy = self.unif[1] - otherball.unif[1]
     rd = self.radius + otherball.radius
     # check sign of a.b to see if converging
-    dotP = Utility.dotproduct(dx, dy, 0,
-                              (self.vx - otherball.vx),
-                              (self.vy - otherball.vy), 0)
+    dotP = dot([dx, dy, 0.0],
+               [self.vx - otherball.vx, self.vy - otherball.vy, 0.0])
     if dx * dx + dy * dy <= rd * rd and dotP < 0:
       R = otherball.mass / self.mass #ratio of masses
       """Glancing angle for equating angular momentum before and after collision.

@@ -1,15 +1,16 @@
 import fcntl
-import ioctl
 import os
 import select
 
-from echomesh.util import Log
+from six.moves import filter
 
 from pi3d.event.Constants import *
 
+from pi3d.event import ioctl
 from pi3d.event import AbsAxisScaling
 from pi3d.event import EventStruct
 from pi3d.event import Format
+from pi3d.util import Log
 
 LOGGER = Log.logger(__name__)
 
@@ -44,9 +45,9 @@ class EventStream(object):
   axisHat3Y = 13
   axisThrottle = 14
   axisRudder = 15
-  axisWheel=16
+  axisWheel = 16
   axisGas = 17
-  axisBrake=18
+  axisBrake = 18
   axisPressure = 19
   axisDistance = 20
   axisTiltX = 21
@@ -162,17 +163,17 @@ class EventStream(object):
     If the streams parameter is not given, then all streams are selected.
     """
     #print EventStream.AllStreams
-    #print map(lambda(x):x.filehandle, EventStream.AllStreams)
+    #print map(lambda x: x.filehandle, EventStream.AllStreams)
     if streams == None:
       streams = EventStream.AllStreams
 
     selectlist = map(lambda x: x.filehandle, streams)
 
-    ready = select.select(selectlist,[ ], [ ], 0)[0]
+    ready = select.select(selectlist, [ ], [ ], 0)[0]
     if not ready: return
     while ready:
       for fd in ready:
-        stream = filter(lambda x: x.filehandle == fd, streams)[0]
+        stream = list(filter(lambda x: x.filehandle == fd, streams))[0]
         try:
           s = os.read(fd, Format.EventSize)
         except Exception as e:
@@ -188,7 +189,7 @@ class EventStream(object):
           event = EventStruct.EventStruct(stream)
           event.decode(s)
           yield event
-      ready = select.select(selectlist,[ ], [ ], 0)[0]
+      ready = select.select(selectlist, [ ], [ ], 0)[0]
 
   def __enter__(self):
     return self
