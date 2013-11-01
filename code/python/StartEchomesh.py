@@ -3,9 +3,11 @@
 if __name__ == '__main__':
     import os
     import sys
+    import platform
 
     cwd = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
-    cython_plugin_folder = cwd + '/build/lib.linux-x86_64-2.7'
+    build_folder = platform.uname()[0].lower() + '-' + platform.machine() + '-' + sys.version[:3]
+    cython_plugin_folder = cwd + '/build/lib.%s' % build_folder
 
     sys.path.insert(0, cython_plugin_folder)
 
